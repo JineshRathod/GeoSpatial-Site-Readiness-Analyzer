@@ -1,0 +1,4 @@
+# Local secrets — use .env.example templates in repo
+.env
+**/.env
+!**/.env.example

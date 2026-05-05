@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Ola Places Explorer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:        #0d0f14;
+    --surface:   #161a23;
+    --surface2:  #1e2330;
+    --border:    #2a3040;
+    --accent:    #f97316;
+    --accent2:   #fb923c;
+    --text:      #e8eaf0;
+    --muted:     #6b7280;
+    --success:   #22c55e;
+    --radius:    10px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── background grid ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0;
+    background-image:
+      linear-gradient(rgba(249,115,22,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(249,115,22,.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+  }
+
+  .app { position: relative; z-index: 1; }
+
+  /* ── header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 18px; font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .logo span { color: var(--accent); }
+  .header-meta {
+    font-size: 12px; color: var(--muted);
+    font-family: 'Space Mono', monospace;
+  }
+  #place-count-badge {
+    background: var(--accent);
+    color: #000; font-weight: 700;
+    padding: 2px 8px; border-radius: 20px;
+    font-size: 12px; margin-left: 6px;
+  }
+
+  /* ── drop zone ── */
+  #drop-zone {
+    max-width: 560px; margin: 80px auto 0;
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 60px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    background: var(--surface);
+  }
+  #drop-zone:hover, #drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(249,115,22,.05);
+  }
+  #drop-zone .drop-icon {
+    font-size: 48px; margin-bottom: 16px; display: block;
+  }
+  #drop-zone h2 {
+    font-size: 20px; font-weight: 600; margin-bottom: 8px;
+  }
+  #drop-zone p { color: var(--muted); font-size: 14px; }
+  #file-input { display: none; }
+  .btn {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 10px 24px;
+    background: var(--accent);
+    color: #000; font-weight: 600;
+    border-radius: 8px; border: none;
+    cursor: pointer; font-size: 14px;
+    transition: background .15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .btn:hover { background: var(--accent2); }
+
+  /* ── main dashboard ── */
+  #dashboard { display: none; }
+
+  /* ── stat bar ── */
+  .stats-bar {
+    display: flex; flex-wrap: wrap; gap: 12px;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .stat-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 20px; min-width: 130px;
+  }
+  .stat-card .val {
+    font-family: 'Space Mono', monospace;
+    font-size: 22px; font-weight: 700;
+    color: var(--accent);
+  }
+  .stat-card .lbl {
+    font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .5px;
+    margin-top: 2px;
+  }
+
+  /* ── toolbar ── */
+  .toolbar {
+    padding: 16px 32px;
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky; top: 61px; z-index: 90;
+  }
+  .search-wrap {
+    position: relative; flex: 1; min-width: 220px;
+  }
+  .search-wrap input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 14px 9px 36px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-wrap .search-icon {
+    position: absolute; left: 11px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted); font-size: 15px; pointer-events: none;
+  }
+  select, .sort-select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 14px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    cursor: pointer;
+    transition: border-color .15s;
+  }
+  select:focus { border-color: var(--accent); }
+
+  .view-btns { display: flex; gap: 4px; }
+  .view-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 12px; cursor: pointer; color: var(--muted);
+    font-size: 16px; transition: all .15s;
+  }
+  .view-btn.active {
+    background: var(--accent);
+    color: #000; border-color: var(--accent);
+  }
+
+  .result-info {
+    font-size: 12px; color: var(--muted);
+    font-family: 'Space Mono', monospace;
+    margin-left: auto;
+  }
+
+  /* ── type filter chips ── */
+  .filter-bar {
+    padding: 10px 32px;
+    display: flex; flex-wrap: wrap; gap: 6px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    max-height: 120px; overflow-y: auto;
+  }
+  .filter-bar::-webkit-scrollbar { height: 4px; }
+  .filter-bar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .chip {
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    font-size: 11px; cursor: pointer;
+    background: var(--surface);
+    color: var(--muted);
+    transition: all .15s;
+    white-space: nowrap;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .chip .chip-count {
+    background: var(--border);
+    border-radius: 10px;
+    padding: 1px 5px;
+    font-size: 10px;
+  }
+  .chip.active {
+    color: #000; font-weight: 600;
+    border-color: transparent;
+  }
+  .chip.active .chip-count { background: rgba(0,0,0,.2); }
+  #clear-filters {
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px dashed var(--muted);
+    font-size: 11px; cursor: pointer;
+    background: transparent;
+    color: var(--muted);
+    transition: all .15s;
+  }
+  #clear-filters:hover { color: var(--accent); border-color: var(--accent); }
+
+  /* ── content area ── */
+  #content {
+    padding: 24px 32px;
+    min-height: 300px;
+  }
+
+  /* ── card grid ── */
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+  }
+  .place-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    transition: border-color .15s, transform .15s;
+    cursor: default;
+    animation: fadeUp .25s ease both;
+  }
+  .place-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(10px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+  .card-name {
+    font-size: 14px; font-weight: 600;
+    margin-bottom: 6px;
+    line-height: 1.3;
+  }
+  .card-addr {
+    font-size: 12px; color: var(--muted);
+    line-height: 1.4; margin-bottom: 10px;
+  }
+  .card-footer {
+    display: flex; align-items: center;
+    justify-content: space-between; flex-wrap: wrap; gap: 6px;
+  }
+  .type-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tag {
+    font-size: 10px; padding: 2px 8px;
+    border-radius: 12px; font-weight: 600;
+    letter-spacing: .3px;
+  }
+  .dist-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 11px; color: var(--muted);
+    display: flex; align-items: center; gap: 4px;
+    flex-shrink: 0;
+  }
+  .dist-bar-wrap {
+    width: 48px; height: 3px;
+    background: var(--border); border-radius: 2px;
+  }
+  .dist-bar {
+    height: 100%; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent), #fbbf24);
+    transition: width .3s;
+  }
+
+  /* ── table view ── */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead th {
+    background: var(--surface2);
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .5px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap; cursor: pointer;
+    user-select: none;
+  }
+  thead th:hover { color: var(--accent); }
+  thead th .sort-arrow { margin-left: 4px; opacity: .4; }
+  thead th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background .1s;
+    animation: fadeUp .2s ease both;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  td {
+    padding: 11px 16px;
+    vertical-align: middle;
+  }
+  td.name-cell { font-weight: 500; max-width: 200px; }
+  td.addr-cell { color: var(--muted); max-width: 280px; font-size: 12px; }
+  td.dist-cell {
+    font-family: 'Space Mono', monospace;
+    font-size: 12px; white-space: nowrap;
+  }
+
+  /* ── empty state ── */
+  .empty {
+    text-align: center; padding: 60px 20px;
+    color: var(--muted);
+  }
+  .empty .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty p { font-size: 14px; }
+
+  /* ── pagination ── */
+  .pagination {
+    display: flex; justify-content: center; align-items: center;
+    gap: 8px; padding: 24px 0 8px;
+    flex-wrap: wrap;
+  }
+  .page-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 6px 12px; cursor: pointer;
+    color: var(--text); font-size: 13px;
+    transition: all .15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .page-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .page-btn.active {
+    background: var(--accent); color: #000;
+    border-color: var(--accent); font-weight: 700;
+  }
+  .page-btn:disabled { opacity: .3; cursor: not-allowed; }
+  .page-info {
+    font-size: 12px; color: var(--muted);
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">OLA <span>PLACES</span> EXPLORER</div>
+    <div class="header-meta">
+      Nearby Search Results
+      <span id="place-count-badge">—</span>
+    </div>
+  </header>
+
+  <!-- DROP ZONE -->
+  <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <span class="drop-icon">📂</span>
+    <h2>Drop your JSON file here</h2>
+    <p>Upload the <code>ola_places_output.json</code> generated by the script</p>
+    <button class="btn" onclick="event.stopPropagation(); document.getElementById('file-input').click()">Browse File</button>
+    <input type="file" id="file-input" accept=".json"/>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard">
+
+    <div class="stats-bar" id="stats-bar"></div>
+
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="search-input" placeholder="Search by name or address…"/>
+      </div>
+      <select id="sort-select">
+        <option value="name-asc">Name A→Z</option>
+        <option value="name-desc">Name Z→A</option>
+        <option value="dist-asc" selected>Distance ↑</option>
+        <option value="dist-desc">Distance ↓</option>
+      </select>
+      <select id="per-page">
+        <option value="24">24 / page</option>
+        <option value="48">48 / page</option>
+        <option value="96">96 / page</option>
+        <option value="9999">All</option>
+      </select>
+      <div class="view-btns">
+        <button class="view-btn active" id="btn-cards" onclick="setView('cards')" title="Cards">⊞</button>
+        <button class="view-btn" id="btn-table" onclick="setView('table')" title="Table">≡</button>
+      </div>
+      <div class="result-info" id="result-info"></div>
+    </div>
+
+    <div class="filter-bar" id="filter-bar"></div>
+
+    <div id="content"></div>
+
+    <div class="pagination" id="pagination"></div>
+
+  </div><!-- /dashboard -->
+
+</div>
+
+<script>
+// ── colour palette for types ─────────────────────────────────────────────
+const PALETTE = [
+  ['#f97316','#1a0800'],['#22c55e','#001a08'],['#3b82f6','#000d1a'],
+  ['#a855f7','#0e0018'],['#ec4899','#1a0010'],['#14b8a6','#001a18'],
+  ['#f59e0b','#1a1000'],['#ef4444','#1a0000'],['#84cc16','#0d1a00'],
+  ['#06b6d4','#001218'],['#8b5cf6','#0a0018'],['#f43f5e','#1a0008'],
+  ['#10b981','#001a10'],['#0ea5e9','#000e1a'],['#d97706','#1a0e00'],
+  ['#dc2626','#1a0000'],['#7c3aed','#0c001a'],['#db2777','#1a0012'],
+  ['#059669','#001a10'],['#2563eb','#000a1a'],['#ca8a04','#1a1200'],
+];
+const typeColourMap = {};
+let colourIdx = 0;
+function typeColour(t) {
+  if (!typeColourMap[t]) {
+    typeColourMap[t] = PALETTE[colourIdx % PALETTE.length];
+    colourIdx++;
+  }
+  return typeColourMap[t];
+}
+
+// ── state ────────────────────────────────────────────────────────────────
+let allPlaces  = [];
+let filtered   = [];
+let activeTypes = new Set();
+let currentView = 'cards';
+let currentPage = 1;
+let perPage     = 24;
+let sortKey     = 'dist-asc';
+let searchQ     = '';
+let maxDist     = 1;
+let tableSortCol = null;
+let tableSortDir = 1;
+
+// ── file loading ─────────────────────────────────────────────────────────
+const dz = document.getElementById('drop-zone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  loadFile(e.dataTransfer.files[0]);
+});
+document.getElementById('file-input').addEventListener('change', e => loadFile(e.target.files[0]));
+
+function loadFile(file) {
+  if (!file || !file.name.endsWith('.json')) return alert('Please select a .json file');
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      allPlaces = JSON.parse(e.target.result);
+      maxDist = Math.max(...allPlaces.map(p => p.distance_meters || 0)) || 1;
+      document.getElementById('drop-zone').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      document.getElementById('place-count-badge').textContent = allPlaces.length;
+      buildStats();
+      buildTypeChips();
+      applyFilters();
+    } catch { alert('Invalid JSON file'); }
+  };
+  reader.readAsText(file);
+}
+
+// ── stats ────────────────────────────────────────────────────────────────
+function buildStats() {
+  const types = new Set(allPlaces.flatMap(p => p.types || []));
+  const dists = allPlaces.map(p => p.distance_meters || 0).filter(Boolean);
+  const avgDist = Math.round(dists.reduce((a,b)=>a+b,0)/dists.length);
+  document.getElementById('stats-bar').innerHTML = `
+    <div class="stat-card"><div class="val">${allPlaces.length}</div><div class="lbl">Total Places</div></div>
+    <div class="stat-card"><div class="val">${types.size}</div><div class="lbl">Unique Types</div></div>
+    <div class="stat-card"><div class="val">${Math.min(...dists)}m</div><div class="lbl">Nearest</div></div>
+    <div class="stat-card"><div class="val">${Math.max(...dists)}m</div><div class="lbl">Farthest</div></div>
+    <div class="stat-card"><div class="val">${avgDist}m</div><div class="lbl">Avg Distance</div></div>
+  `;
+}
+
+// ── type chips ───────────────────────────────────────────────────────────
+function buildTypeChips() {
+  const counts = {};
+  allPlaces.forEach(p => (p.types||[]).forEach(t => counts[t] = (counts[t]||0)+1));
+  const sorted = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+  const bar = document.getElementById('filter-bar');
+  bar.innerHTML = '<button id="clear-filters" onclick="clearFilters()">✕ Clear</button>';
+  sorted.forEach(([t, n]) => {
+    const [bg] = typeColour(t);
+    const chip = document.createElement('button');
+    chip.className = 'chip';
+    chip.dataset.type = t;
+    chip.innerHTML = `${t} <span class="chip-count">${n}</span>`;
+    chip.onclick = () => toggleType(t);
+    bar.appendChild(chip);
+  });
+}
+
+function toggleType(t) {
+  if (activeTypes.has(t)) activeTypes.delete(t); else activeTypes.add(t);
+  document.querySelectorAll('.chip').forEach(c => {
+    const ct = c.dataset.type;
+    if (!ct) return;
+    if (activeTypes.has(ct)) {
+      const [bg, fg] = typeColour(ct);
+      c.classList.add('active');
+      c.style.background = bg; c.style.color = fg;
+    } else {
+      c.classList.remove('active');
+      c.style.background = ''; c.style.color = '';
+    }
+  });
+  currentPage = 1;
+  applyFilters();
+}
+
+function clearFilters() {
+  activeTypes.clear();
+  document.querySelectorAll('.chip').forEach(c => {
+    c.classList.remove('active');
+    c.style.background = ''; c.style.color = '';
+  });
+  currentPage = 1;
+  applyFilters();
+}
+
+// ── filtering + sorting ──────────────────────────────────────────────────
+document.getElementById('search-input').addEventListener('input', e => {
+  searchQ = e.target.value.toLowerCase();
+  currentPage = 1; applyFilters();
+});
+document.getElementById('sort-select').addEventListener('change', e => {
+  sortKey = e.target.value; applyFilters();
+});
+document.getElementById('per-page').addEventListener('change', e => {
+  perPage = parseInt(e.target.value); currentPage = 1; applyFilters();
+});
+
+function getName(p)    { return p.structured_formatting?.main_text || p.name || p.description || ''; }
+function getAddress(p) { return p.structured_formatting?.secondary_text || p.description || ''; }
+function getTypes(p)   { return p.types || []; }
+function getDist(p)    { return p.distance_meters || 0; }
+
+function applyFilters() {
+  filtered = allPlaces.filter(p => {
+    const name = getName(p).toLowerCase();
+    const addr = getAddress(p).toLowerCase();
+    if (searchQ && !name.includes(searchQ) && !addr.includes(searchQ)) return false;
+    if (activeTypes.size > 0 && !getTypes(p).some(t => activeTypes.has(t))) return false;
+    return true;
+  });
+
+  // sort
+  const [sk, sd] = sortKey.split('-');
+  filtered.sort((a, b) => {
+    let va = sk === 'name' ? getName(a).toLowerCase() : getDist(a);
+    let vb = sk === 'name' ? getName(b).toLowerCase() : getDist(b);
+    return sd === 'asc' ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+  });
+
+  document.getElementById('result-info').textContent =
+    `${filtered.length} of ${allPlaces.length} places`;
+
+  render();
+  renderPagination();
+}
+
+// ── render ───────────────────────────────────────────────────────────────
+function setView(v) {
+  currentView = v; currentPage = 1;
+  document.getElementById('btn-cards').classList.toggle('active', v==='cards');
+  document.getElementById('btn-table').classList.toggle('active', v==='table');
+  render(); renderPagination();
+}
+
+function getPage() {
+  const start = (currentPage - 1) * perPage;
+  return perPage >= 9999 ? filtered : filtered.slice(start, start + perPage);
+}
+
+function render() {
+  const items = getPage();
+  const el = document.getElementById('content');
+  if (!items.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🔍</div><p>No places match your filters.</p></div>`;
+    return;
+  }
+  currentView === 'cards' ? renderCards(items, el) : renderTable(items, el);
+}
+
+function renderCards(items, el) {
+  el.innerHTML = `<div class="cards-grid">${items.map((p,i) => cardHTML(p,i)).join('')}</div>`;
+}
+
+function cardHTML(p, i) {
+  const name  = getName(p);
+  const addr  = getAddress(p);
+  const types = getTypes(p);
+  const dist  = getDist(p);
+  const pct   = Math.round((dist / maxDist) * 100);
+  const tags  = types.map(t => {
+    const [bg, fg] = typeColour(t);
+    return `<span class="tag" style="background:${bg};color:${fg}">${t}</span>`;
+  }).join('');
+  return `
+    <div class="place-card" style="animation-delay:${i*12}ms">
+      <div class="card-name">${escH(name)}</div>
+      <div class="card-addr">${escH(addr)}</div>
+      <div class="card-footer">
+        <div class="type-tags">${tags}</div>
+        <div class="dist-badge">
+          <div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%"></div></div>
+          ${dist}m
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderTable(items, el) {
+  const cols = [
+    { key:'name',  label:'Name' },
+    { key:'types', label:'Type(s)' },
+    { key:'addr',  label:'Address' },
+    { key:'dist',  label:'Distance' },
+  ];
+  const headers = cols.map(c => {
+    const isSorted = tableSortCol === c.key;
+    const arrow = isSorted ? (tableSortDir === 1 ? ' ↑' : ' ↓') : ' ↕';
+    return `<th class="${isSorted?'sorted':''}" onclick="sortTable('${c.key}')">
+      ${c.label}<span class="sort-arrow">${arrow}</span>
+    </th>`;
+  }).join('');
+
+  const rows = items.map((p,i) => {
+    const types = getTypes(p);
+    const tags  = types.map(t => {
+      const [bg, fg] = typeColour(t);
+      return `<span class="tag" style="background:${bg};color:${fg}">${t}</span>`;
+    }).join(' ');
+    return `<tr style="animation-delay:${i*8}ms">
+      <td class="name-cell">${escH(getName(p))}</td>
+      <td><div style="display:flex;flex-wrap:wrap;gap:3px">${tags}</div></td>
+      <td class="addr-cell">${escH(getAddress(p))}</td>
+      <td class="dist-cell">📍 ${getDist(p)}m</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `<div class="table-wrap">
+    <table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table>
+  </div>`;
+}
+
+function sortTable(col) {
+  if (tableSortCol === col) tableSortDir *= -1; else { tableSortCol = col; tableSortDir = 1; }
+  filtered.sort((a, b) => {
+    let va, vb;
+    if (col === 'name')  { va = getName(a).toLowerCase();  vb = getName(b).toLowerCase(); }
+    if (col === 'addr')  { va = getAddress(a).toLowerCase(); vb = getAddress(b).toLowerCase(); }
+    if (col === 'dist')  { va = getDist(a);  vb = getDist(b); }
+    if (col === 'types') { va = getTypes(a).join(','); vb = getTypes(b).join(','); }
+    return va > vb ? tableSortDir : -tableSortDir;
+  });
+  render();
+}
+
+// ── pagination ───────────────────────────────────────────────────────────
+function renderPagination() {
+  const el = document.getElementById('pagination');
+  if (perPage >= 9999 || filtered.length <= perPage) { el.innerHTML=''; return; }
+  const total = Math.ceil(filtered.length / perPage);
+  let html = `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
+  const range = pageRange(currentPage, total);
+  range.forEach(n => {
+    if (n === '…') html += `<span class="page-info">…</span>`;
+    else html += `<button class="page-btn ${n===currentPage?'active':''}" onclick="goPage(${n})">${n}</button>`;
+  });
+  html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===total?'disabled':''}>›</button>`;
+  html += `<span class="page-info">${currentPage}/${total}</span>`;
+  el.innerHTML = html;
+}
+
+function pageRange(cur, total) {
+  if (total <= 7) return Array.from({length:total},(_,i)=>i+1);
+  const pages = [1];
+  if (cur > 3) pages.push('…');
+  for (let i=Math.max(2,cur-1); i<=Math.min(total-1,cur+1); i++) pages.push(i);
+  if (cur < total-2) pages.push('…');
+  pages.push(total);
+  return pages;
+}
+
+function goPage(n) {
+  const total = Math.ceil(filtered.length / perPage);
+  if (n < 1 || n > total) return;
+  currentPage = n;
+  render(); renderPagination();
+  window.scrollTo({top: 0, behavior:'smooth'});
+}
+
+function escH(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

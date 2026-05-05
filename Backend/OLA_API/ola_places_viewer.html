@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Ola Places Explorer</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#0d0f14;--surface:#161a23;--surface2:#1e2330;--border:#2a3040;--accent:#f97316;--accent2:#fb923c;--text:#e8eaf0;--muted:#6b7280;--radius:10px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(249,115,22,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(249,115,22,.03) 1px,transparent 1px);background-size:40px 40px;pointer-events:none}
+.app{position:relative;z-index:1}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:200}
+.logo{font-family:'Space Mono',monospace;font-size:17px;font-weight:700}
+.logo span{color:var(--accent)}
+.header-right{display:flex;align-items:center;gap:12px}
+#place-count-badge{background:var(--accent);color:#000;font-weight:700;padding:2px 8px;border-radius:20px;font-size:12px}
+.tabs{display:flex;gap:4px;background:var(--surface);border-bottom:1px solid var(--border);padding:0 28px;position:sticky;top:57px;z-index:190}
+.tab{padding:12px 20px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;color:var(--muted);transition:all .15s;background:none;border-top:none;border-left:none;border-right:none;font-family:'DM Sans',sans-serif}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+#drop-zone{max-width:520px;margin:80px auto 0;border:2px dashed var(--border);border-radius:16px;padding:56px 40px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surface)}
+#drop-zone:hover,#drop-zone.drag-over{border-color:var(--accent);background:rgba(249,115,22,.05)}
+#drop-zone .drop-icon{font-size:48px;margin-bottom:14px;display:block}
+#drop-zone h2{font-size:19px;font-weight:600;margin-bottom:6px}
+#drop-zone p{color:var(--muted);font-size:13px}
+#drop-zone .hint{margin-top:10px;font-size:12px;color:var(--accent);opacity:.8}
+#file-input{display:none}
+.btn{display:inline-block;margin-top:18px;padding:10px 24px;background:var(--accent);color:#000;font-weight:600;border-radius:8px;border:none;cursor:pointer;font-size:14px;transition:background .15s;font-family:'DM Sans',sans-serif}
+.btn:hover{background:var(--accent2)}
+#dashboard{display:none}
+.stats-bar{display:flex;flex-wrap:wrap;gap:10px;padding:16px 28px;border-bottom:1px solid var(--border);background:var(--surface)}
+.stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:10px 18px;min-width:120px}
+.stat-card .val{font-family:'Space Mono',monospace;font-size:20px;font-weight:700;color:var(--accent)}
+.stat-card .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.toolbar{padding:14px 28px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;border-bottom:1px solid var(--border);background:var(--surface)}
+.search-wrap{position:relative;flex:1;min-width:200px}
+.search-wrap input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 14px 9px 34px;color:var(--text);font-size:14px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .15s}
+.search-wrap input:focus{border-color:var(--accent)}
+.search-wrap .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none}
+select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;cursor:pointer}
+select:focus{border-color:var(--accent)}
+.view-btns{display:flex;gap:4px}
+.view-btn{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 11px;cursor:pointer;color:var(--muted);font-size:15px;transition:all .15s}
+.view-btn.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.result-info{font-size:12px;color:var(--muted);font-family:'Space Mono',monospace;margin-left:auto}
+.filter-bar{padding:8px 28px;display:flex;flex-wrap:wrap;gap:5px;border-bottom:1px solid var(--border);background:var(--bg);max-height:110px;overflow-y:auto}
+.chip{padding:4px 11px;border-radius:20px;border:1px solid var(--border);font-size:11px;cursor:pointer;background:var(--surface);color:var(--muted);transition:all .15s;white-space:nowrap;display:flex;align-items:center;gap:4px}
+.chip .cc{background:var(--border);border-radius:10px;padding:1px 5px;font-size:10px}
+.chip.active{color:#000;font-weight:600;border-color:transparent}
+.chip.active .cc{background:rgba(0,0,0,.2)}
+#clear-filters{padding:4px 11px;border-radius:20px;border:1px dashed var(--muted);font-size:11px;cursor:pointer;background:transparent;color:var(--muted);transition:all .15s}
+#clear-filters:hover{color:var(--accent);border-color:var(--accent)}
+#list-content{padding:22px 28px;min-height:200px}
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px}
+.place-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;transition:border-color .15s,transform .15s;animation:fadeUp .22s ease both}
+.place-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.card-name{font-size:13px;font-weight:600;margin-bottom:5px;line-height:1.3}
+.card-addr{font-size:11px;color:var(--muted);line-height:1.4;margin-bottom:9px}
+.card-footer{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:5px}
+.type-tags{display:flex;flex-wrap:wrap;gap:3px}
+.tag{font-size:10px;padding:2px 7px;border-radius:12px;font-weight:600;letter-spacing:.3px}
+.dist-badge{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px;flex-shrink:0}
+.dist-bar-wrap{width:44px;height:3px;background:var(--border);border-radius:2px}
+.dist-bar{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent),#fbbf24)}
+.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{background:var(--surface2);padding:11px 14px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none}
+thead th:hover{color:var(--accent)}
+thead th.sorted{color:var(--accent)}
+tbody tr{border-bottom:1px solid var(--border);transition:background .1s;animation:fadeUp .18s ease both}
+tbody tr:last-child{border-bottom:none}
+tbody tr:hover{background:var(--surface2)}
+td{padding:10px 14px;vertical-align:middle}
+td.name-cell{font-weight:500;max-width:190px}
+td.addr-cell{color:var(--muted);max-width:270px;font-size:12px}
+td.dist-cell{font-family:'Space Mono',monospace;font-size:12px;white-space:nowrap}
+.empty{text-align:center;padding:56px 20px;color:var(--muted)}
+.empty .ei{font-size:38px;margin-bottom:10px}
+.pagination{display:flex;justify-content:center;align-items:center;gap:6px;padding:20px 0 6px;flex-wrap:wrap}
+.page-btn{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 11px;cursor:pointer;color:var(--text);font-size:13px;transition:all .15s;font-family:'DM Sans',sans-serif}
+.page-btn:hover{border-color:var(--accent);color:var(--accent)}
+.page-btn.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700}
+.page-btn:disabled{opacity:.3;cursor:not-allowed}
+.page-info{font-size:12px;color:var(--muted);font-family:'Space Mono',monospace}
+#tab-map{display:none;position:relative}
+#map{width:100%;height:calc(100vh - 115px)}
+#map-sidebar{position:absolute;top:12px;right:12px;z-index:1000;width:280px;background:rgba(22,26,35,.97);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+.sidebar-header{padding:11px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.sidebar-header h3{font-size:13px;font-weight:600}
+#map-search-input{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 12px;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none;margin:10px 14px;width:calc(100% - 28px);display:block}
+#map-search-input:focus{border-color:var(--accent)}
+#map-type-filter{padding:0 14px 8px;max-height:220px;overflow-y:auto}
+.mchip{display:flex;align-items:center;gap:8px;padding:5px 0;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)}
+.mchip:last-child{border-bottom:none}
+.mchip input{cursor:pointer;accent-color:var(--accent)}
+.mdot{width:10px;height:10px;border-radius:50%;flex-shrink:0;border:1px solid rgba(255,255,255,.2)}
+.sidebar-footer{padding:10px 14px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);font-family:'Space Mono',monospace}
+#map-info-panel{position:absolute;bottom:12px;left:12px;z-index:1000;background:rgba(22,26,35,.97);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;max-width:270px;display:none;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+#map-info-panel .mi-name{font-size:13px;font-weight:600;margin-bottom:4px;padding-right:20px}
+#map-info-panel .mi-tags{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px}
+#map-info-panel .mi-addr{font-size:11px;color:var(--muted);line-height:1.4}
+#map-info-panel .mi-dist{font-family:'Space Mono',monospace;font-size:11px;color:var(--accent);margin-top:5px}
+#map-info-close{position:absolute;top:8px;right:10px;cursor:pointer;background:none;border:none;color:var(--muted);font-size:16px}
+#map-info-close:hover{color:var(--text)}
+#no-coords-warn{display:none;background:rgba(249,115,22,.1);border:1px solid var(--accent);color:var(--accent);font-size:13px;padding:10px 16px;margin:12px 28px;border-radius:8px;line-height:1.5}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.leaflet-popup-content-wrapper{background:#1e2330;color:#e8eaf0;border:1px solid #2a3040;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+.leaflet-popup-tip{background:#1e2330}
+.leaflet-popup-content{font-family:'DM Sans',sans-serif;font-size:13px;line-height:1.5;margin:10px 14px}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="logo">OLA <span>PLACES</span> EXPLORER</div>
+  <div class="header-right">
+    <span style="font-size:12px;color:var(--muted);font-family:'Space Mono',monospace">loaded:</span>
+    <span id="place-count-badge">—</span>
+  </div>
+</header>
+
+<div id="drop-zone" onclick="document.getElementById('file-input').click()">
+  <span class="drop-icon">📂</span>
+  <h2>Drop your JSON file here</h2>
+  <p>Load <code>ola_places_output.json</code> or <code>ola_places_enriched.json</code></p>
+  <div class="hint">💡 Run <code>enrich_coords.py</code> first for full map pin support</div>
+  <button class="btn" onclick="event.stopPropagation();document.getElementById('file-input').click()">Browse File</button>
+  <input type="file" id="file-input" accept=".json"/>
+</div>
+
+<div id="dashboard">
+  <div class="tabs">
+    <button class="tab active" id="tab-btn-list" onclick="switchTab('list')">📋 List View</button>
+    <button class="tab" id="tab-btn-map" onclick="switchTab('map')">🗺 Map View</button>
+  </div>
+  <div class="stats-bar" id="stats-bar"></div>
+  <div id="no-coords-warn">⚠ No coordinates in this file — map pins not available.<br>Run <strong>enrich_coords.py</strong> to add lat/lng, then reload <strong>ola_places_enriched.json</strong>.</div>
+
+  <!-- LIST TAB -->
+  <div id="tab-list">
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="si">🔍</span>
+        <input type="text" id="search-input" placeholder="Search by name or address…"/>
+      </div>
+      <select id="sort-select">
+        <option value="dist-asc" selected>Distance ↑</option>
+        <option value="dist-desc">Distance ↓</option>
+        <option value="name-asc">Name A→Z</option>
+        <option value="name-desc">Name Z→A</option>
+      </select>
+      <select id="per-page">
+        <option value="24">24/page</option>
+        <option value="48">48/page</option>
+        <option value="96">96/page</option>
+        <option value="9999">All</option>
+      </select>
+      <div class="view-btns">
+        <button class="view-btn active" id="btn-cards" onclick="setView('cards')" title="Cards">⊞</button>
+        <button class="view-btn" id="btn-table" onclick="setView('table')" title="Table">≡</button>
+      </div>
+      <div class="result-info" id="result-info"></div>
+    </div>
+    <div class="filter-bar" id="filter-bar"></div>
+    <div id="list-content"></div>
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+  <!-- MAP TAB -->
+  <div id="tab-map">
+    <div id="map"></div>
+    <div id="map-sidebar">
+      <div class="sidebar-header">
+        <h3>🗺 Filter Map</h3>
+        <span id="map-visible-count" style="font-size:11px;color:var(--muted);font-family:'Space Mono',monospace"></span>
+      </div>
+      <input type="text" id="map-search-input" placeholder="Search places on map…"/>
+      <div id="map-type-filter"></div>
+      <div class="sidebar-footer" id="sidebar-footer"></div>
+    </div>
+    <div id="map-info-panel">
+      <button id="map-info-close" onclick="document.getElementById('map-info-panel').style.display='none'">✕</button>
+      <div class="mi-name" id="mi-name"></div>
+      <div class="mi-tags" id="mi-tags"></div>
+      <div class="mi-addr" id="mi-addr"></div>
+      <div class="mi-dist" id="mi-dist"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PALETTE=[['#f97316','#1a0800'],['#22c55e','#001a08'],['#3b82f6','#000d1a'],['#a855f7','#0e0018'],['#ec4899','#1a0010'],['#14b8a6','#001a18'],['#f59e0b','#1a1000'],['#ef4444','#1a0000'],['#84cc16','#0d1a00'],['#06b6d4','#001218'],['#8b5cf6','#0a0018'],['#f43f5e','#1a0008'],['#10b981','#001a10'],['#0ea5e9','#000e1a'],['#d97706','#1a0e00'],['#dc2626','#1a0000'],['#7c3aed','#0c001a'],['#db2777','#1a0012'],['#059669','#001a10'],['#2563eb','#000a1a']];
+const typeColourMap={};let ci=0;
+function tc(t){if(!typeColourMap[t]){typeColourMap[t]=PALETTE[ci%PALETTE.length];ci++;}return typeColourMap[t];}
+
+let allPlaces=[],filtered=[],activeTypes=new Set();
+let currentView='cards',currentPage=1,perPage=24,sortKey='dist-asc',searchQ='';
+let maxDist=1,hasCoords=false,leafletMap=null,markers=[];
+let mapActiveTypes=new Set(),mapSearchQ='';
+let tableSortCol=null,tableSortDir=1;
+
+const dz=document.getElementById('drop-zone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');loadFile(e.dataTransfer.files[0])});
+document.getElementById('file-input').addEventListener('change',e=>loadFile(e.target.files[0]));
+
+function loadFile(file){
+  if(!file||!file.name.endsWith('.json'))return alert('Please select a .json file');
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      allPlaces=JSON.parse(e.target.result);
+      maxDist=Math.max(...allPlaces.map(p=>p.distance_meters||0))||1;
+      hasCoords=allPlaces.some(p=>p.lat&&p.lng);
+      dz.style.display='none';
+      document.getElementById('dashboard').style.display='block';
+      document.getElementById('place-count-badge').textContent=allPlaces.length;
+      if(!hasCoords)document.getElementById('no-coords-warn').style.display='block';
+      buildStats();buildTypeChips();applyFilters();
+      if(hasCoords)setTimeout(initMap,100);
+    }catch{alert('Invalid JSON file');}
+  };
+  r.readAsText(file);
+}
+
+function switchTab(t){
+  document.getElementById('tab-list').style.display=t==='list'?'block':'none';
+  document.getElementById('tab-map').style.display=t==='map'?'block':'none';
+  document.getElementById('tab-btn-list').classList.toggle('active',t==='list');
+  document.getElementById('tab-btn-map').classList.toggle('active',t==='map');
+  if(t==='map'&&leafletMap)setTimeout(()=>leafletMap.invalidateSize(),60);
+}
+
+function buildStats(){
+  const types=new Set(allPlaces.flatMap(p=>p.types||[]));
+  const dists=allPlaces.map(p=>p.distance_meters||0).filter(Boolean);
+  const avg=Math.round(dists.reduce((a,b)=>a+b,0)/dists.length);
+  const wc=allPlaces.filter(p=>p.lat&&p.lng).length;
+  document.getElementById('stats-bar').innerHTML=`
+    <div class="stat-card"><div class="val">${allPlaces.length}</div><div class="lbl">Total Places</div></div>
+    <div class="stat-card"><div class="val">${types.size}</div><div class="lbl">Unique Types</div></div>
+    <div class="stat-card"><div class="val">${Math.min(...dists)}m</div><div class="lbl">Nearest</div></div>
+    <div class="stat-card"><div class="val">${Math.max(...dists)}m</div><div class="lbl">Farthest</div></div>
+    <div class="stat-card"><div class="val">${avg}m</div><div class="lbl">Avg Distance</div></div>
+    ${hasCoords?'<div class="stat-card"><div class="val">'+wc+'</div><div class="lbl">On Map</div></div>':''}`;
+}
+
+function buildTypeChips(){
+  const counts={};
+  allPlaces.forEach(p=>(p.types||[]).forEach(t=>counts[t]=(counts[t]||0)+1));
+  const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+  const bar=document.getElementById('filter-bar');
+  bar.innerHTML='<button id="clear-filters" onclick="clearFilters()">✕ Clear</button>';
+  sorted.forEach(([t,n])=>{
+    const chip=document.createElement('button');
+    chip.className='chip';chip.dataset.type=t;
+    chip.innerHTML=t+'<span class="cc">'+n+'</span>';
+    chip.onclick=()=>toggleType(t);bar.appendChild(chip);
+  });
+}
+function toggleType(t){
+  if(activeTypes.has(t))activeTypes.delete(t);else activeTypes.add(t);
+  document.querySelectorAll('.chip').forEach(c=>{
+    const ct=c.dataset.type;if(!ct)return;
+    if(activeTypes.has(ct)){const[bg,fg]=tc(ct);c.classList.add('active');c.style.background=bg;c.style.color=fg;}
+    else{c.classList.remove('active');c.style.background='';c.style.color='';}
+  });
+  currentPage=1;applyFilters();
+}
+function clearFilters(){
+  activeTypes.clear();
+  document.querySelectorAll('.chip').forEach(c=>{c.classList.remove('active');c.style.background='';c.style.color='';});
+  currentPage=1;applyFilters();
+}
+
+document.getElementById('search-input').addEventListener('input',e=>{searchQ=e.target.value.toLowerCase();currentPage=1;applyFilters();});
+document.getElementById('sort-select').addEventListener('change',e=>{sortKey=e.target.value;applyFilters();});
+document.getElementById('per-page').addEventListener('change',e=>{perPage=parseInt(e.target.value);currentPage=1;applyFilters();});
+
+const getName=p=>p.structured_formatting&&p.structured_formatting.main_text?p.structured_formatting.main_text:p.name||p.description||'';
+const getAddr=p=>p.structured_formatting&&p.structured_formatting.secondary_text?p.structured_formatting.secondary_text:p.description||'';
+const getTypes=p=>p.types||[];
+const getDist=p=>p.distance_meters||0;
+
+function applyFilters(){
+  filtered=allPlaces.filter(p=>{
+    const n=getName(p).toLowerCase(),a=getAddr(p).toLowerCase();
+    if(searchQ&&!n.includes(searchQ)&&!a.includes(searchQ))return false;
+    if(activeTypes.size>0&&!getTypes(p).some(t=>activeTypes.has(t)))return false;
+    return true;
+  });
+  const parts=sortKey.split('-'),sk=parts[0],sd=parts[1];
+  filtered.sort((a,b)=>{
+    let va=sk==='name'?getName(a).toLowerCase():getDist(a);
+    let vb=sk==='name'?getName(b).toLowerCase():getDist(b);
+    return sd==='asc'?(va>vb?1:-1):(va<vb?1:-1);
+  });
+  document.getElementById('result-info').textContent=filtered.length+' of '+allPlaces.length;
+  render();renderPagination();
+}
+
+function setView(v){
+  currentView=v;currentPage=1;
+  document.getElementById('btn-cards').classList.toggle('active',v==='cards');
+  document.getElementById('btn-table').classList.toggle('active',v==='table');
+  render();renderPagination();
+}
+function getPage(){const s=(currentPage-1)*perPage;return perPage>=9999?filtered:filtered.slice(s,s+perPage);}
+function render(){
+  const items=getPage(),el=document.getElementById('list-content');
+  if(!items.length){el.innerHTML='<div class="empty"><div class="ei">🔍</div><p>No places match.</p></div>';return;}
+  if(currentView==='cards')renderCards(items,el);else renderTable(items,el);
+}
+function renderCards(items,el){
+  el.innerHTML='<div class="cards-grid">'+items.map((p,i)=>cardHTML(p,i)).join('')+'</div>';
+}
+function cardHTML(p,i){
+  const name=getName(p),addr=getAddr(p),types=getTypes(p),dist=getDist(p);
+  const pct=Math.round((dist/maxDist)*100);
+  const tags=types.map(t=>{const c=tc(t);return'<span class="tag" style="background:'+c[0]+';color:'+c[1]+'">'+t+'</span>';}).join('');
+  return'<div class="place-card" style="animation-delay:'+i*10+'ms"><div class="card-name">'+escH(name)+'</div><div class="card-addr">'+escH(addr)+'</div><div class="card-footer"><div class="type-tags">'+tags+'</div><div class="dist-badge"><div class="dist-bar-wrap"><div class="dist-bar" style="width:'+pct+'%"></div></div>'+dist+'m</div></div></div>';
+}
+function renderTable(items,el){
+  const cols=[{key:'name',label:'Name'},{key:'types',label:'Type(s)'},{key:'addr',label:'Address'},{key:'dist',label:'Distance'}];
+  const hdrs=cols.map(c=>'<th class="'+(tableSortCol===c.key?'sorted':'')+'" onclick="sortTable(\''+c.key+'\')">'+c.label+' <span style="opacity:.4">'+(tableSortCol===c.key?(tableSortDir===1?'↑':'↓'):'↕')+'</span></th>').join('');
+  const rows=items.map((p,i)=>{
+    const tags=getTypes(p).map(t=>{const c=tc(t);return'<span class="tag" style="background:'+c[0]+';color:'+c[1]+'">'+t+'</span>';}).join(' ');
+    return'<tr style="animation-delay:'+i*7+'ms"><td class="name-cell">'+escH(getName(p))+'</td><td><div style="display:flex;flex-wrap:wrap;gap:3px">'+tags+'</div></td><td class="addr-cell">'+escH(getAddr(p))+'</td><td class="dist-cell">📍 '+getDist(p)+'m</td></tr>';
+  }).join('');
+  el.innerHTML='<div class="table-wrap"><table><thead><tr>'+hdrs+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function sortTable(col){
+  if(tableSortCol===col)tableSortDir*=-1;else{tableSortCol=col;tableSortDir=1;}
+  filtered.sort((a,b)=>{
+    let va,vb;
+    if(col==='name'){va=getName(a).toLowerCase();vb=getName(b).toLowerCase();}
+    else if(col==='addr'){va=getAddr(a).toLowerCase();vb=getAddr(b).toLowerCase();}
+    else if(col==='dist'){va=getDist(a);vb=getDist(b);}
+    else{va=getTypes(a).join(',');vb=getTypes(b).join(',');}
+    return va>vb?tableSortDir:-tableSortDir;
+  });render();
+}
+function renderPagination(){
+  const el=document.getElementById('pagination');
+  if(perPage>=9999||filtered.length<=perPage){el.innerHTML='';return;}
+  const total=Math.ceil(filtered.length/perPage);
+  let h='<button class="page-btn" onclick="goPage('+(currentPage-1)+')" '+(currentPage===1?'disabled':'')+'>‹</button>';
+  pageRange(currentPage,total).forEach(n=>{
+    if(n==='…')h+='<span class="page-info">…</span>';
+    else h+='<button class="page-btn '+(n===currentPage?'active':'')+'" onclick="goPage('+n+')">'+n+'</button>';
+  });
+  h+='<button class="page-btn" onclick="goPage('+(currentPage+1)+')" '+(currentPage===total?'disabled':'')+'>›</button>';
+  h+='<span class="page-info">'+currentPage+'/'+total+'</span>';
+  el.innerHTML=h;
+}
+function pageRange(cur,total){
+  if(total<=7)return Array.from({length:total},(_,i)=>i+1);
+  const p=[1];if(cur>3)p.push('…');
+  for(let i=Math.max(2,cur-1);i<=Math.min(total-1,cur+1);i++)p.push(i);
+  if(cur<total-2)p.push('…');p.push(total);return p;
+}
+function goPage(n){
+  const total=Math.ceil(filtered.length/perPage);
+  if(n<1||n>total)return;
+  currentPage=n;render();renderPagination();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ── MAP ── */
+function initMap(){
+  if(leafletMap)return;
+  const wc=allPlaces.filter(p=>p.lat&&p.lng);
+  if(!wc.length)return;
+  const avgLat=wc.reduce((s,p)=>s+parseFloat(p.lat),0)/wc.length;
+  const avgLng=wc.reduce((s,p)=>s+parseFloat(p.lng),0)/wc.length;
+  leafletMap=L.map('map').setView([avgLat,avgLng],15);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    attribution:'© OpenStreetMap © CARTO',maxZoom:19
+  }).addTo(leafletMap);
+  buildMapSidebar();
+  renderMapMarkers();
+}
+
+function mapAllTypes(){
+  const s=new Set();
+  allPlaces.filter(p=>p.lat&&p.lng).forEach(p=>(p.types||[]).forEach(t=>s.add(t)));
+  return[...s].sort();
+}
+
+function buildMapSidebar(){
+  const types=mapAllTypes();
+  mapActiveTypes=new Set(types);
+  const container=document.getElementById('map-type-filter');
+  container.innerHTML=types.map(t=>{
+    const c=tc(t);
+    return'<label class="mchip"><input type="checkbox" checked data-mtype="'+t+'" onchange="onMapTypeToggle()"/><span class="mdot" style="background:'+c[0]+'"></span><span style="flex:1">'+t+'</span></label>';
+  }).join('');
+  document.getElementById('map-search-input').addEventListener('input',e=>{
+    mapSearchQ=e.target.value.toLowerCase();renderMapMarkers();
+  });
+}
+
+function onMapTypeToggle(){
+  mapActiveTypes=new Set([...document.querySelectorAll('#map-type-filter input:checked')].map(cb=>cb.dataset.mtype));
+  renderMapMarkers();
+}
+
+function renderMapMarkers(){
+  if(!leafletMap)return;
+  markers.forEach(m=>leafletMap.removeLayer(m));
+  markers=[];
+  const places=allPlaces.filter(p=>{
+    if(!p.lat||!p.lng)return false;
+    if(mapActiveTypes.size&&!getTypes(p).some(t=>mapActiveTypes.has(t)))return false;
+    if(mapSearchQ){
+      const n=getName(p).toLowerCase(),a=getAddr(p).toLowerCase();
+      if(!n.includes(mapSearchQ)&&!a.includes(mapSearchQ))return false;
+    }
+    return true;
+  });
+  places.forEach(p=>{
+    const ptype=(p.types||['unknown'])[0];
+    const c=tc(ptype);
+    const m=L.circleMarker([parseFloat(p.lat),parseFloat(p.lng)],{
+      radius:7,fillColor:c[0],color:'#111',weight:1,opacity:1,fillOpacity:0.88
+    }).addTo(leafletMap);
+    // tooltip on hover
+    m.bindTooltip('<b>'+escH(getName(p))+'</b><br><span style="color:#f97316;font-size:11px">'+(p.types||[]).join(', ')+'</span>',{direction:'top',offset:[0,-8]});
+    m.on('click',()=>showMapInfo(p));
+    markers.push(m);
+  });
+  const total=allPlaces.filter(p=>p.lat&&p.lng).length;
+  document.getElementById('map-visible-count').textContent=markers.length+' shown';
+  document.getElementById('sidebar-footer').textContent=markers.length+' / '+total+' places';
+}
+
+function showMapInfo(p){
+  const types=getTypes(p);
+  const tags=types.map(t=>{const c=tc(t);return'<span class="tag" style="background:'+c[0]+';color:'+c[1]+'">'+t+'</span>';}).join('');
+  document.getElementById('mi-name').textContent=getName(p);
+  document.getElementById('mi-tags').innerHTML=tags;
+  document.getElementById('mi-addr').textContent=getAddr(p);
+  document.getElementById('mi-dist').textContent='📍 '+getDist(p)+' m away';
+  document.getElementById('map-info-panel').style.display='block';
+}
+
+function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+</script>
+</div>
+</body>
+</html>

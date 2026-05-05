@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Telecom & EV Map Explorer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#0f1117;color:#e8eaf0;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+#drop-screen{position:fixed;inset:0;z-index:9999;background:#0f1117;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+#drop-zone{border:2px dashed #3a4060;border-radius:16px;padding:60px 80px;text-align:center;cursor:pointer;transition:all .2s;background:#161b27;max-width:500px;width:90%}
+#drop-zone:hover,#drop-zone.drag-over{border-color:#f97316;background:rgba(249,115,22,.06)}
+#drop-zone h2{font-size:20px;font-weight:600;margin-bottom:8px;color:#e8eaf0}
+#drop-zone p{color:#6b7280;font-size:13px;line-height:1.6}
+#drop-zone .hint{margin-top:12px;font-size:12px;color:#f97316;opacity:.85}
+.upload-btn{margin-top:18px;padding:10px 28px;background:#f97316;color:#000;font-weight:700;border:none;border-radius:8px;cursor:pointer;font-size:14px}
+.upload-btn:hover{background:#fb923c}
+#file-input{display:none}
+
+#app{display:none;flex-direction:column;height:100vh}
+#topbar{background:#161b27;border-bottom:1px solid #2a3040;padding:10px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:8px;flex-shrink:0}
+.logo{font-size:14px;font-weight:700;color:#f97316;letter-spacing:.5px;white-space:nowrap}
+.spacer{flex:1}
+#search{padding:6px 12px;font-size:13px;border:1px solid #2a3040;border-radius:6px;background:#1e2330;color:#e8eaf0;outline:none;width:200px}
+#search:focus{border-color:#f97316}
+.fbtn{padding:5px 14px;font-size:12px;border:1px solid #2a3040;border-radius:20px;cursor:pointer;background:#1e2330;color:#9ca3af;transition:all .15s;white-space:nowrap}
+.fbtn.on-tower{background:#2563eb;color:#fff;border-color:#2563eb}
+.fbtn.on-ev{background:#16a34a;color:#fff;border-color:#16a34a}
+.reload-btn{padding:5px 12px;font-size:12px;border:1px solid #f97316;border-radius:6px;cursor:pointer;background:transparent;color:#f97316}
+.reload-btn:hover{background:#f97316;color:#000}
+
+#stats-bar{background:#1a1f2e;border-bottom:1px solid #2a3040;padding:6px 16px;display:flex;gap:20px;flex-wrap:wrap;flex-shrink:0}
+.stat{font-size:11px;color:#6b7280}.stat span{color:#f97316;font-weight:700}
+
+#main{display:flex;flex:1;overflow:hidden}
+#map{flex:1;height:100%}
+
+#sidebar{width:300px;background:#161b27;border-left:1px solid #2a3040;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+#sidebar-tabs{display:flex;border-bottom:1px solid #2a3040;flex-shrink:0}
+.stab{flex:1;padding:9px;text-align:center;font-size:12px;font-weight:600;cursor:pointer;color:#6b7280;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;color:#6b7280}
+.stab.active{color:#f97316;border-bottom-color:#f97316}
+#sidebar-list{overflow-y:auto;flex:1;padding:6px}
+.place-item{padding:10px;border:1px solid #2a3040;border-radius:8px;margin-bottom:6px;cursor:pointer;transition:border-color .15s}
+.place-item:hover{border-color:#f97316}
+.place-item.selected{border-color:#f97316;background:rgba(249,115,22,.06)}
+.pi-name{font-size:12px;font-weight:600;margin-bottom:3px;line-height:1.3}
+.pi-addr{font-size:11px;color:#6b7280;line-height:1.3;margin-bottom:5px}
+.pi-footer{display:flex;align-items:center;justify-content:space-between;gap:4px;flex-wrap:wrap}
+.pi-dist{font-size:11px;color:#f97316;font-family:monospace}
+.pi-tag{font-size:10px;padding:2px 6px;border-radius:10px;font-weight:600}
+
+#info-panel{background:#1a1f2e;border-top:1px solid #2a3040;padding:12px 14px;flex-shrink:0;min-height:90px;max-height:200px;overflow-y:auto}
+#info-panel .ip-empty{font-size:12px;color:#4b5563}
+.ip-name{font-size:13px;font-weight:700;margin-bottom:5px}
+.ip-row{font-size:11px;color:#9ca3af;margin-bottom:3px;display:flex;gap:6px;align-items:flex-start}
+.ip-row strong{color:#e8eaf0;min-width:65px;flex-shrink:0}
+.ip-pill{display:inline-block;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;margin:2px 2px 2px 0}
+
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:#0f1117}::-webkit-scrollbar-thumb{background:#2a3040;border-radius:2px}
+.leaflet-popup-content-wrapper{background:#1e2330;color:#e8eaf0;border:1px solid #2a3040;border-radius:8px;font-family:system-ui,sans-serif;font-size:12px}
+.leaflet-popup-tip{background:#1e2330}
+</style>
+</head>
+<body>
+
+<!-- DROP SCREEN -->
+<div id="drop-screen">
+  <div id="drop-zone" onclick="document.getElementById('file-input').click()"
+       ondragover="event.preventDefault();this.classList.add('drag-over')"
+       ondragleave="this.classList.remove('drag-over')"
+       ondrop="event.preventDefault();this.classList.remove('drag-over');loadFile(event.dataTransfer.files[0])">
+    <div style="font-size:52px;margin-bottom:14px">📂</div>
+    <h2>Upload your results JSON</h2>
+    <p>Drop the JSON file exported by<br><code>find_towers_ev.py</code> here</p>
+    <div class="hint">⚡ Supports telecom_towers + ev_stations format</div>
+    <button class="upload-btn" onclick="event.stopPropagation();document.getElementById('file-input').click()">Browse File</button>
+  </div>
+  <div id="load-err" style="color:#ef4444;font-size:13px;display:none"></div>
+  <input type="file" id="file-input" accept=".json" onchange="loadFile(this.files[0])"/>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <div id="topbar">
+    <div class="logo">📡 TOWER &amp; ⚡ EV EXPLORER</div>
+    <div class="spacer"></div>
+    <input id="search" type="text" placeholder="Search name / address…" oninput="applyFilters()"/>
+    <button class="fbtn on-tower" id="btn-tower" onclick="toggleLayer('tower')">📡 Towers</button>
+    <button class="fbtn on-ev" id="btn-ev" onclick="toggleLayer('ev')">⚡ EV Stations</button>
+    <button class="reload-btn" onclick="resetApp()">↺ Load new file</button>
+  </div>
+  <div id="stats-bar" id="sbar"></div>
+  <div id="main">
+    <div id="map"></div>
+    <div id="sidebar">
+      <div id="sidebar-tabs">
+        <button class="stab active" id="stab-all" onclick="switchTab('all')">All</button>
+        <button class="stab" id="stab-tower" onclick="switchTab('tower')">📡 Towers</button>
+        <button class="stab" id="stab-ev" onclick="switchTab('ev')">⚡ EV</button>
+      </div>
+      <div id="sidebar-list"></div>
+      <div id="info-panel"><span class="ip-empty">Click a marker or list item to see details</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let map, towerMarkers=[], evMarkers=[], allData={towers:[], ev:[]};
+let showTower=true, showEV=true, activeTab='all', selectedId=null;
+
+function loadFile(file){
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const json=JSON.parse(e.target.result);
+      if(!json.telecom_towers && !json.ev_stations) throw new Error("JSON must have 'telecom_towers' or 'ev_stations' keys");
+      allData.towers=json.telecom_towers||[];
+      allData.ev=json.ev_stations||[];
+      document.getElementById('drop-screen').style.display='none';
+      document.getElementById('app').style.display='flex';
+      initMap(json.meta);
+    }catch(err){
+      const el=document.getElementById('load-err');
+      el.textContent='Error: '+err.message;
+      el.style.display='block';
+    }
+  };
+  reader.readAsText(file);
+}
+
+function initMap(meta){
+  if(map){map.remove();map=null;}
+  towerMarkers=[];evMarkers=[];
+
+  const clat=meta&&meta.lat?meta.lat:allData.towers[0]?.lat||allData.ev[0]?.lat||23.0;
+  const clon=meta&&meta.lon?meta.lon:allData.towers[0]?.lon||allData.ev[0]?.lon||72.5;
+
+  map=L.map('map').setView([clat,clon],14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    attribution:'© OpenStreetMap © CARTO',maxZoom:19
+  }).addTo(map);
+
+  // Centre marker
+  L.circleMarker([clat,clon],{radius:9,fillColor:'#ef4444',color:'#7f1d1d',weight:2,fillOpacity:1})
+    .addTo(map)
+    .bindPopup(`<b>Search Centre</b><br>${clat.toFixed(6)}, ${clon.toFixed(6)}`);
+
+  // Tower markers
+  allData.towers.forEach((p,i)=>{
+    if(!p.lat||!p.lon) return;
+    const icon=mkIcon('#3b82f6','#1d4ed8',false);
+    const m=L.marker([p.lat,p.lon],{icon}).addTo(map);
+    m.bindPopup(popupHTML(p,'tower'));
+    m.on('click',()=>selectItem('tower',i));
+    towerMarkers.push({marker:m,idx:i});
+  });
+
+  // EV markers
+  allData.ev.forEach((p,i)=>{
+    if(!p.lat||!p.lon) return;
+    const col=p.open_now===true?'#16a34a':p.open_now===false?'#dc2626':'#d97706';
+    const border=p.open_now===true?'#14532d':p.open_now===false?'#7f1d1d':'#78350f';
+    const icon=mkIcon(col,border,true);
+    const m=L.marker([p.lat,p.lon],{icon}).addTo(map);
+    m.bindPopup(popupHTML(p,'ev'));
+    m.on('click',()=>selectItem('ev',i));
+    evMarkers.push({marker:m,idx:i});
+  });
+
+  buildStats();
+  renderList();
+}
+
+function mkIcon(fill,stroke,isEV){
+  const shape=isEV
+    ?`<div style="width:13px;height:13px;border-radius:50%;background:${fill};border:2px solid ${stroke};box-shadow:0 1px 5px rgba(0,0,0,.5)"></div>`
+    :`<div style="width:13px;height:13px;background:${fill};border:2px solid ${stroke};transform:rotate(45deg);box-shadow:0 1px 5px rgba(0,0,0,.5)"></div>`;
+  return L.divIcon({className:'',html:shape,iconSize:[13,13],iconAnchor:[7,7]});
+}
+
+function popupHTML(p,type){
+  const name=p.name||'Unknown';
+  const addr=p.address||'';
+  const dist=p.distance_m!=null?p.distance_m+'m':'—';
+  let extra='';
+  if(type==='ev'){
+    const s=p.open_now===true?'🟢 Open':p.open_now===false?'🔴 Closed':'⚪ Unknown';
+    extra+=`<br>${s}`;
+    if(p.ev_connector_count) extra+=`<br>Ports: ${p.ev_connector_count}`;
+    if(p.phone) extra+=`<br>📞 ${p.phone}`;
+  } else {
+    if(p.rating) extra+=`<br>⭐ ${p.rating}`;
+    if(p.phone) extra+=`<br>📞 ${p.phone}`;
+  }
+  return `<b>${name}</b><br><span style="color:#9ca3af">${addr}</span><br>📍 ${dist}${extra}`;
+}
+
+function buildStats(){
+  const t=allData.towers.length, e=allData.ev.length;
+  const openEV=allData.ev.filter(x=>x.open_now===true).length;
+  const meta=document.getElementById('sbar')||document.getElementById('stats-bar');
+  if(!meta) return;
+  meta.innerHTML=`
+    <div class="stat">Towers: <span>${t}</span></div>
+    <div class="stat">EV Stations: <span>${e}</span></div>
+    <div class="stat">EV Open Now: <span>${openEV}</span></div>
+    <div class="stat">Total: <span>${t+e}</span></div>`;
+}
+
+function renderList(){
+  const q=(document.getElementById('search').value||'').toLowerCase();
+  const list=document.getElementById('sidebar-list');
+  let html='';
+  const addItems=(arr,type)=>{
+    arr.forEach((p,i)=>{
+      if(q&&!(p.name||'').toLowerCase().includes(q)&&!(p.address||'').toLowerCase().includes(q)) return;
+      const isSelected=selectedId===type+i;
+      let tagHtml='';
+      if(type==='ev'){
+        const col=p.open_now===true?'background:#dcfce7;color:#15803d':p.open_now===false?'background:#fee2e2;color:#b91c1c':'background:#f3f4f6;color:#6b7280';
+        const tx=p.open_now===true?'Open':p.open_now===false?'Closed':'?';
+        tagHtml=`<span class="pi-tag" style="${col}">${tx}</span>`;
+        if(p.ev_connector_count) tagHtml+=`<span class="pi-tag" style="background:#dbeafe;color:#1e40af">${p.ev_connector_count} ports</span>`;
+      } else {
+        tagHtml=`<span class="pi-tag" style="background:#dbeafe;color:#1e40af">Tower</span>`;
+        if(p.rating) tagHtml+=`<span class="pi-tag" style="background:#fef9c3;color:#92400e">⭐${p.rating}</span>`;
+      }
+      html+=`<div class="place-item${isSelected?' selected':''}" onclick="selectItem('${type}',${i})">
+        <div class="pi-name">${esc(p.name||'Unknown')}</div>
+        <div class="pi-addr">${esc(p.address||'')}</div>
+        <div class="pi-footer">
+          <div class="pi-dist">${p.distance_m!=null?p.distance_m+'m':'—'}</div>
+          <div>${tagHtml}</div>
+        </div>
+      </div>`;
+    });
+  };
+  if(activeTab==='all'||activeTab==='tower') addItems(allData.towers,'tower');
+  if(activeTab==='all'||activeTab==='ev') addItems(allData.ev,'ev');
+  list.innerHTML=html||'<div style="padding:20px;text-align:center;color:#6b7280;font-size:12px">No results found</div>';
+}
+
+function selectItem(type,idx){
+  selectedId=type+idx;
+  const p=type==='tower'?allData.towers[idx]:allData.ev[idx];
+  if(!p) return;
+
+  // Pan map
+  if(p.lat&&p.lon) map.setView([p.lat,p.lon],16);
+
+  // Open popup
+  const markers=type==='tower'?towerMarkers:evMarkers;
+  const found=markers.find(m=>m.idx===idx);
+  if(found) found.marker.openPopup();
+
+  // Info panel
+  const panel=document.getElementById('info-panel');
+  let html=`<div class="ip-name">${esc(p.name||'Unknown')}</div>`;
+  if(p.address) html+=`<div class="ip-row"><strong>Address</strong>${esc(p.address)}</div>`;
+  if(p.distance_m!=null) html+=`<div class="ip-row"><strong>Distance</strong>${p.distance_m} m</div>`;
+  if(p.phone) html+=`<div class="ip-row"><strong>Phone</strong>${esc(p.phone)}</div>`;
+  if(p.website) html+=`<div class="ip-row"><strong>Website</strong><a href="${p.website}" target="_blank" style="color:#60a5fa">${esc(p.website.replace(/https?:\/\//,'').substring(0,40))}</a></div>`;
+  if(p.google_maps_url) html+=`<div class="ip-row"><strong>Maps</strong><a href="${p.google_maps_url}" target="_blank" style="color:#60a5fa">Open in Google Maps</a></div>`;
+  if(type==='ev'){
+    const s=p.open_now===true?'🟢 Open Now':p.open_now===false?'🔴 Closed':'⚪ Status Unknown';
+    html+=`<div class="ip-row"><strong>Status</strong>${s}</div>`;
+    if(p.ev_connector_count) html+=`<div class="ip-row"><strong>Total Ports</strong>${p.ev_connector_count}</div>`;
+    if(p.ev_connectors&&p.ev_connectors.length){
+      const conn=p.ev_connectors.map(c=>`<span class="ip-pill" style="background:#1e3a5f;color:#93c5fd">${c.type||'Connector'} ×${c.count}${c.max_kw?' @ '+parseFloat(c.max_kw).toFixed(1)+'kW':''}</span>`).join('');
+      html+=`<div class="ip-row"><strong>Connectors</strong><div>${conn}</div></div>`;
+    }
+    if(p.opening_hours&&p.opening_hours.length){
+      const hours=p.opening_hours.filter(Boolean).join('<br>');
+      html+=`<div class="ip-row"><strong>Hours</strong><div>${hours}</div></div>`;
+    }
+  } else {
+    if(p.rating) html+=`<div class="ip-row"><strong>Rating</strong>⭐ ${p.rating} (${p.rating_count||0} reviews)</div>`;
+    if(p.primary_type) html+=`<div class="ip-row"><strong>Type</strong>${esc(p.primary_type)}</div>`;
+  }
+  panel.innerHTML=html;
+
+  renderList();
+  // Scroll list to selected
+  setTimeout(()=>{
+    const sel=document.querySelector('.place-item.selected');
+    if(sel) sel.scrollIntoView({block:'nearest',behavior:'smooth'});
+  },50);
+}
+
+function applyFilters(){
+  const q=(document.getElementById('search').value||'').toLowerCase();
+  // Filter markers
+  towerMarkers.forEach(({marker,idx})=>{
+    const p=allData.towers[idx];
+    const match=!q||(p.name||'').toLowerCase().includes(q)||(p.address||'').toLowerCase().includes(q);
+    if(showTower&&match) marker.addTo(map); else marker.remove();
+  });
+  evMarkers.forEach(({marker,idx})=>{
+    const p=allData.ev[idx];
+    const match=!q||(p.name||'').toLowerCase().includes(q)||(p.address||'').toLowerCase().includes(q);
+    if(showEV&&match) marker.addTo(map); else marker.remove();
+  });
+  renderList();
+}
+
+function toggleLayer(type){
+  if(type==='tower'){
+    showTower=!showTower;
+    document.getElementById('btn-tower').className='fbtn'+(showTower?' on-tower':'');
+  } else {
+    showEV=!showEV;
+    document.getElementById('btn-ev').className='fbtn'+(showEV?' on-ev':'');
+  }
+  applyFilters();
+}
+
+function switchTab(tab){
+  activeTab=tab;
+  ['all','tower','ev'].forEach(t=>document.getElementById('stab-'+t).classList.toggle('active',t===tab));
+  renderList();
+}
+
+function resetApp(){
+  document.getElementById('app').style.display='none';
+  document.getElementById('drop-screen').style.display='flex';
+  document.getElementById('file-input').value='';
+  document.getElementById('load-err').style.display='none';
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+</script>
+</body>
+</html>
